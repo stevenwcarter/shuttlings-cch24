@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use shuttlings_cch24::{day12::day_12_routes, day5::*};
+use shuttlings_cch24::{day12::day_12_routes, day16::day_16_routes, day5::*};
 use shuttlings_cch24::{day2::*, day9::day_9_routes};
 use tower_http::trace::TraceLayer;
 
@@ -37,10 +37,12 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .route("/-1/seek", get(seek_negative_one))
         .nest("/9", day_9_routes())
         .nest("/12", day_12_routes())
+        .nest("/16", day_16_routes())
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &http::Request<_>| {
-                    println!("blah: {}", request.uri());
+                    print!("Method: {} ", request.method());
+                    println!("URI: {}", request.uri());
                     tracing::info_span!(
                         "http_request",
                         method = %request.method(),

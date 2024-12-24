@@ -1,4 +1,4 @@
-use std::{default, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 
 use axum::{
     extract::State,

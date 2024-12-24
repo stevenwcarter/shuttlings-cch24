@@ -1,18 +1,14 @@
 use anyhow::bail;
 use itertools::Itertools;
 use serde::Deserialize;
-use std::{
-    default,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
 
 use axum::{
     extract::{Path, State},
-    http::{HeaderMap, StatusCode},
-    response::{IntoResponse, Response},
+    http::StatusCode,
+    response::IntoResponse,
     routing::{get, post},
-    Json, Router,
+    Router,
 };
 use hashbrown::HashMap;
 
