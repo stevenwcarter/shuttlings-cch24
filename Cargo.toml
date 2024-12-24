@@ -11,12 +11,15 @@ base64 = "0.22.1"
 cargo-manifest = "0.17.0"
 chrono = "0.4.39"
 hashbrown = { version = "0.15.2", features = ["rayon"] }
+html-escape = "0.2.13"
 itertools = "0.13.0"
 jsonwebtoken = "9.3.0"
 leaky-bucket = "1.1.2"
 serde = { version = "1.0.216", features = ["derive"] }
 shuttle-axum = "0.49.0"
 shuttle-runtime = "0.49.0"
+shuttle-shared-db = { version = "0.49.0", features = ["diesel-async", "postgres", "sqlx"] }
+sqlx = "0.8.2"
 tokio = "1.28.2"
 toml = "0.8.19"
 tower-http = { version = "0.6.2", features = ["full", "trace"] }

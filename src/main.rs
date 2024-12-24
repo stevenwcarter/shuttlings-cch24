@@ -2,11 +2,11 @@ use axum::{
     http::{self, HeaderMap, StatusCode},
     response::IntoResponse,
     routing::{get, post},
-    Router,
+    Extension, Router,
 };
-use shuttlings_cch24::{day12::day_12_routes, day16::day_16_routes, day5::*};
+use shuttlings_cch24::{day12::day_12_routes, day16::day_16_routes, day23::day_23_routes, day5::*};
 use shuttlings_cch24::{day2::*, day9::day_9_routes};
-use tower_http::trace::TraceLayer;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 
 async fn hello_world() -> &'static str {
     "Hello, bird!"
@@ -26,7 +26,7 @@ async fn seek_negative_one() -> impl IntoResponse {
 }
 
 #[shuttle_runtime::main]
-async fn main() -> shuttle_axum::ShuttleAxum {
+async fn main(#[shuttle_shared_db::Postgres] pool: sqlx::PgPool) -> shuttle_axum::ShuttleAxum {
     let router = Router::new()
         .route("/", get(hello_world))
         .route("/2/dest", get(dest_2))
@@ -38,6 +38,9 @@ async fn main() -> shuttle_axum::ShuttleAxum {
         .nest("/9", day_9_routes())
         .nest("/12", day_12_routes())
         .nest("/16", day_16_routes())
+        .nest("/23", day_23_routes())
+        .nest_service("/assets", ServeDir::new("assets"))
+        .layer(Extension(pool))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &http::Request<_>| {
