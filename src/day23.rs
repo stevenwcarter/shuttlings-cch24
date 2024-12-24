@@ -53,9 +53,10 @@ pub async fn ornament(Path((state, n)): Path<(String, String)>) -> impl IntoResp
     let next_state = if state.as_str() == "on" { "off" } else { "on" };
 
     let result = format!(
-        r#"<div class="ornament{}" id="ornament{n}" hx-trigger="load changed delay:2s once" hx-get="/23/ornament/{next_state}/{n}" hx-swap="outerHTML"></div>"#,
+        "<div class='ornament{}' id='ornament{n}' hx-trigger='load delay:2s once' hx-get='/23/ornament/{next_state}/{n}' hx-swap='outerHTML'></div>",
         class
     );
+    println!("Result: '{result}'");
 
     (StatusCode::OK, result)
 }
