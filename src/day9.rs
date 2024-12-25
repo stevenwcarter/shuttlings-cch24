@@ -1,4 +1,7 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use axum::{
     extract::State,
@@ -17,19 +20,17 @@ pub struct CustomLimiter {
 pub fn day_9_routes() -> Router {
     Router::new()
         .route("/milk", post(milk))
-        // .route("/refill", post(refill))
-        .with_state(build_milk_limiter())
+        .route("/refill", post(refill))
+        .with_state(Arc::new(Mutex::new(build_milk_limiter())))
 }
 
-pub fn build_milk_limiter() -> Arc<RateLimiter> {
-    Arc::new(
-        RateLimiter::builder()
-            .max(5)
-            .initial(5)
-            .interval(Duration::from_secs(1))
-            .refill(1)
-            .build(),
-    )
+pub fn build_milk_limiter() -> RateLimiter {
+    RateLimiter::builder()
+        .max(5)
+        .initial(5)
+        .interval(Duration::from_secs(1))
+        .refill(1)
+        .build()
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, Default)]
@@ -45,12 +46,12 @@ pub struct Day9Json {
 }
 
 pub async fn milk(
-    State(rate_limiter): State<Arc<RateLimiter>>,
+    State(rate_limiter): State<Arc<Mutex<RateLimiter>>>,
     headers: HeaderMap,
     payload: Option<Json<Day9Json>>,
 ) -> Response {
     println!("\nHeaders: {:#?}\nPayload: {:#?}", headers, payload);
-    match rate_limiter.try_acquire(1) {
+    match rate_limiter.lock().unwrap().try_acquire(1) {
         true => {
             if let Some(content_type) = headers.get("Content-Type") {
                 if content_type == "application/json" {
@@ -105,6 +106,7 @@ pub async fn milk(
     }
 }
 
-pub async fn refill(State(limiter): State<RateLimiter>) -> impl IntoResponse {
+pub async fn refill(State(limiter): State<Arc<Mutex<RateLimiter>>>) -> impl IntoResponse {
+    *limiter.lock().unwrap() = build_milk_limiter();
     (StatusCode::OK, "")
 }
