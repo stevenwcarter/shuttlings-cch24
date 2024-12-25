@@ -1,3 +1,6 @@
+use itertools::Itertools;
+use std::io::Read;
+
 use axum::{
     extract::Path,
     http::StatusCode,
@@ -5,12 +8,15 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use axum_extra::extract::Multipart;
+use toml::Table;
 
 pub fn day_23_routes() -> Router {
     Router::new()
         .route("/star", get(star))
         .route("/present/:color", get(present_color))
         .route("/ornament/:state/:n", get(ornament))
+        .route("/lockfile", post(lockfile))
 }
 
 pub async fn star() -> impl IntoResponse {
@@ -59,4 +65,54 @@ pub async fn ornament(Path((state, n)): Path<(String, String)>) -> impl IntoResp
     println!("Result: '{result}'");
 
     (StatusCode::OK, result)
+}
+
+pub async fn lockfile(mut multipart: Multipart) -> impl IntoResponse {
+    if let Ok(multipart) = multipart.next_field().await {
+        if let Some(field) = multipart {
+            let name = field.name().unwrap().to_string();
+            let data = field.bytes().await.unwrap();
+
+            println!("Length of `{}` is {} bytes", name, data.len());
+            let data = String::from_utf8(data.into()).unwrap();
+            println!("Data: {data}");
+            match data.parse::<Table>() {
+                Ok(data) => {
+                    if let Some(packages) = data.get("package") {
+                        println!("Packges: {:#?}", packages);
+                        let data = packages
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(|p| p.as_table())
+                        .inspect(|a| println!("{:?}", a))
+                        .filter_map(|p| p.get("checksum"))
+                        .filter(|c| c.is_str())
+                        .inspect(|a| println!("{:?}", a))
+                        .filter_map(|c| c.as_str())
+                        .inspect(|a| println!("{:?}", a))
+                        .map(|c| {
+                            let color = &c[0..6];
+                            let top = i64::from_str_radix(&c[6..8], 16).unwrap();
+                            let left = i64::from_str_radix(&c[8..10], 16).unwrap();
+
+                            format!("<div style='background-color:#{color};top:{top}px;left:{left}px;'></div>")
+                        })
+                        .inspect(|a| println!("{:?}", a))
+                        .collect::<Vec<String>>()
+                        .join("");
+                        (StatusCode::OK, data)
+                    } else {
+                        println!("No package data");
+                        (StatusCode::BAD_REQUEST, "".to_owned())
+                    }
+                }
+                _ => (StatusCode::BAD_REQUEST, "".to_owned()),
+            }
+        } else {
+            (StatusCode::BAD_REQUEST, "ok".to_owned())
+        }
+    } else {
+        (StatusCode::BAD_REQUEST, "ok".to_owned())
+    }
 }

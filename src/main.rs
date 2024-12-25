@@ -1,12 +1,19 @@
+use std::convert::Infallible;
+
 use axum::{
+    body::{to_bytes, Body, Bytes},
     http::{self, HeaderMap, StatusCode},
-    response::IntoResponse,
+    middleware::Next,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Extension, Router,
 };
-use shuttlings_cch24::{day12::day_12_routes, day16::day_16_routes, day23::day_23_routes, day5::*};
+use hyper::Request;
+use shuttlings_cch24::{
+    day12::day_12_routes, day16::day_16_routes, day19::day_19_routes, day23::day_23_routes, day5::*,
+};
 use shuttlings_cch24::{day2::*, day9::day_9_routes};
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{body::Full, services::ServeDir, trace::TraceLayer};
 
 async fn hello_world() -> &'static str {
     "Hello, bird!"
@@ -27,6 +34,10 @@ async fn seek_negative_one() -> impl IntoResponse {
 
 #[shuttle_runtime::main]
 async fn main(#[shuttle_shared_db::Postgres] pool: sqlx::PgPool) -> shuttle_axum::ShuttleAxum {
+    sqlx::migrate!()
+        .run(&pool)
+        .await
+        .expect("Failed to run migrations");
     let router = Router::new()
         .route("/", get(hello_world))
         .route("/2/dest", get(dest_2))
@@ -39,8 +50,10 @@ async fn main(#[shuttle_shared_db::Postgres] pool: sqlx::PgPool) -> shuttle_axum
         .nest("/12", day_12_routes())
         .nest("/16", day_16_routes())
         .nest("/23", day_23_routes())
+        .nest("/19", day_19_routes(pool.clone()))
         .nest_service("/assets", ServeDir::new("assets"))
         .layer(Extension(pool))
+        // .layer(axum::middleware::from_fn(log_response_middleware))
         .layer(
             TraceLayer::new_for_http()
                 .make_span_with(|request: &http::Request<_>| {
@@ -57,6 +70,8 @@ async fn main(#[shuttle_shared_db::Postgres] pool: sqlx::PgPool) -> shuttle_axum
                     |response: &http::Response<_>,
                      _latency: std::time::Duration,
                      span: &tracing::Span| {
+                        println!("StatusCode: {}", response.status());
+                        // println!("Body: {:?}", response.body());
                         span.record("status_code", tracing::field::display(response.status()));
                     },
                 ),
@@ -64,3 +79,20 @@ async fn main(#[shuttle_shared_db::Postgres] pool: sqlx::PgPool) -> shuttle_axum
 
     Ok(router.into())
 }
+
+// async fn log_response_middleware(req: Request<axum::body::Body>, next: Next) -> impl IntoResponse {
+//     // Proceed with the request
+//     let mut response = next.run(req).await;
+//
+//     // Extract and log the response body
+//     if let Ok(bytes) = to_bytes(*response.body(), 200000).await {
+//         let body_string = String::from_utf8_lossy(&bytes);
+//         println!("Response body: {}", body_string);
+//
+//         // Reconstruct the response body since it was consumed
+//         let new_body = Response::from_parts(_, body)
+//         response = response.map(|_| new_body);
+//     }
+//
+//     response
+// }
