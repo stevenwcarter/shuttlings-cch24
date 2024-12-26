@@ -1,5 +1,7 @@
 use anyhow::bail;
 use itertools::Itertools;
+use rand::Rng;
+use rand::SeedableRng;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 
@@ -28,6 +30,7 @@ pub enum Team {
     Milk,
 }
 
+#[derive(Debug, Clone)]
 pub struct Board {
     pub grid: HashMap<(usize, usize), Tile>,
 }
@@ -163,6 +166,36 @@ impl Board {
 
         Ok(())
     }
+    pub fn create_random_board(&mut self, rng: &mut rand::rngs::StdRng) {
+        self.reset();
+        (0..4).for_each(|y| {
+            (1..5).for_each(|x| {
+                let tile = match rng.gen::<bool>() {
+                    true => Tile::Cookie,
+                    false => Tile::Milk,
+                };
+                *self
+                    .grid
+                    .entry((x as usize, y as usize))
+                    .or_insert(Tile::Empty) = tile;
+            });
+        });
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Day12State {
+    pub board: Arc<Mutex<Board>>,
+    pub rng: Arc<Mutex<rand::prelude::StdRng>>,
+}
+
+impl Default for Day12State {
+    fn default() -> Self {
+        Self {
+            board: Arc::new(Mutex::new(Board::default())),
+            rng: Arc::new(Mutex::new(rand::rngs::StdRng::seed_from_u64(2024))),
+        }
+    }
 }
 
 pub fn day_12_routes() -> Router {
@@ -170,15 +203,17 @@ pub fn day_12_routes() -> Router {
         .route("/board", get(board))
         .route("/reset", post(reset))
         .route("/place/:team/:column", post(place_item))
-        .with_state(Arc::new(Mutex::new(Board::default())))
+        .route("/random-board", get(random_board))
+        .with_state(Day12State::default())
 }
 
-pub async fn board(State(board): State<Arc<Mutex<Board>>>) -> impl IntoResponse {
-    board.lock().unwrap().display()
+pub async fn board(State(state): State<Day12State>) -> impl IntoResponse {
+    state.board.lock().unwrap().display()
 }
 
-pub async fn reset(State(board): State<Arc<Mutex<Board>>>) -> impl IntoResponse {
-    let mut board = board.lock().unwrap();
+pub async fn reset(State(state): State<Day12State>) -> impl IntoResponse {
+    *state.rng.lock().unwrap() = rand::rngs::StdRng::seed_from_u64(2024);
+    let mut board = state.board.lock().unwrap();
     board.reset();
 
     board.display()
@@ -186,14 +221,22 @@ pub async fn reset(State(board): State<Arc<Mutex<Board>>>) -> impl IntoResponse 
 
 pub async fn place_item(
     Path((team, column)): Path<(Team, u8)>,
-    State(board): State<Arc<Mutex<Board>>>,
+    State(state): State<Day12State>,
 ) -> impl IntoResponse {
     if !(1..=4).contains(&column) {
         return (StatusCode::BAD_REQUEST, "out of range".to_string());
     }
-    let mut board = board.lock().unwrap();
+    let mut board = state.board.lock().unwrap();
     match board.place(team, column) {
         Ok(_) => (StatusCode::OK, board.display()),
         _ => (StatusCode::SERVICE_UNAVAILABLE, board.display()),
     }
+}
+
+pub async fn random_board(State(state): State<Day12State>) -> impl IntoResponse {
+    let mut board = state.board.lock().unwrap();
+    let mut rng = state.rng.lock().unwrap();
+    board.create_random_board(&mut rng);
+
+    board.display()
 }
