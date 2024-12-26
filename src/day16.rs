@@ -1,4 +1,3 @@
-use anyhow::{Context, Result};
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -6,19 +5,12 @@ use axum::{
     Json, Router,
 };
 use axum_extra::extract::{cookie::Cookie, CookieJar};
-use base64::prelude::*;
 use core::str;
 use jsonwebtoken::{
-    decode, decode_header, encode, errors::ErrorKind, Algorithm, DecodingKey, EncodingKey, Header,
-    Validation,
+    decode, decode_header, encode, errors::ErrorKind, DecodingKey, EncodingKey, Header, Validation,
 };
-use pem::parse;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::{
-    collections::HashSet,
-    fs::{read, read_to_string},
-};
+use std::{collections::HashSet, fs::read_to_string};
 
 const SECRET_KEY: &[u8] = b"28348932";
 

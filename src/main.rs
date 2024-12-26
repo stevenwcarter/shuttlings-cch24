@@ -44,7 +44,7 @@ async fn main(#[shuttle_shared_db::Postgres] pool: sqlx::PgPool) -> shuttle_axum
         .route("/2/key", get(key_2))
         .route("/2/v6/dest", get(dest_2_v6))
         .route("/2/v6/key", get(key_2_v6))
-        .route("/5/manifest", post(manifest_5))
+        .nest("/5", day_05_routes())
         .route("/-1/seek", get(seek_negative_one))
         .nest("/9", day_9_routes())
         .nest("/12", day_12_routes())
