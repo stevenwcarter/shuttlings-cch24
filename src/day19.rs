@@ -1,12 +1,16 @@
+use std::sync::{Arc, Mutex};
+
 use axum::{
-    extract::Path,
+    extract::{Path, Query},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
     Extension, Json, Router,
 };
+use hashbrown::HashMap;
+use rand::{distributions::Alphanumeric, Rng};
 use serde::{Deserialize, Serialize};
-use sqlx::{prelude::FromRow, query};
+use sqlx::prelude::FromRow;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -31,7 +35,91 @@ pub fn day_19_routes(pool: sqlx::PgPool) -> Router {
         .route("/remove/:id", delete(remove_quote_by_id))
         .route("/undo/:id", put(undo))
         .route("/draft", post(draft))
+        .route("/list", get(list))
         .layer(Extension(pool))
+        .layer(Extension(Arc::new(Mutex::new(
+            HashMap::<String, u32>::new(),
+        ))))
+}
+
+fn generate_token() -> String {
+    let mut rng = rand::thread_rng();
+    (0..16).map(|_| rng.sample(Alphanumeric) as char).collect()
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ListQuery {
+    pub token: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct List {
+    quotes: Vec<Quote>,
+    page: u32,
+    next_token: Option<String>,
+}
+
+#[axum::debug_handler]
+pub async fn list(
+    Query(list_query): Query<ListQuery>,
+    Extension(pool): Extension<sqlx::PgPool>,
+    Extension(list_cache): Extension<Arc<Mutex<HashMap<String, u32>>>>,
+) -> Response {
+    let token = list_query.token;
+    let mut page_number = 1;
+    if let Some(token) = token {
+        let list_cache = list_cache.lock().unwrap();
+        let search = list_cache.get(&token);
+        if let Some(search) = search {
+            page_number = *search;
+        } else {
+            return (StatusCode::BAD_REQUEST).into_response();
+        }
+    }
+
+    let offset = page_number.saturating_sub(1) * 3;
+    match sqlx::query_as::<_, Quote>(
+        "SELECT * FROM quotes ORDER BY created_at ASC LIMIT 4 OFFSET $1",
+    )
+    .bind(offset as i32)
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(quotes_4) => {
+            if quotes_4.len() == 4 {
+                let quotes = quotes_4[0..4].to_vec();
+                let token = generate_token();
+                list_cache
+                    .lock()
+                    .unwrap()
+                    .insert(token.to_owned(), page_number + 1);
+
+                (
+                    StatusCode::OK,
+                    Json(List {
+                        quotes,
+                        page: page_number,
+                        next_token: Some(token),
+                    }),
+                )
+                    .into_response()
+            } else {
+                (
+                    StatusCode::OK,
+                    Json(List {
+                        quotes: quotes_4.clone(),
+                        page: page_number,
+                        next_token: None,
+                    }),
+                )
+                    .into_response()
+            }
+        }
+        Err(e) => {
+            println!("Error: {:?}", e);
+            (StatusCode::BAD_REQUEST, Json("invalid input")).into_response()
+        }
+    }
 }
 
 pub async fn get_quote_by_id(
