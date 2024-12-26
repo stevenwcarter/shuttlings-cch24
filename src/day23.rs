@@ -4,7 +4,7 @@ use std::io::Read;
 use axum::{
     extract::Path,
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Response},
     routing::{get, post},
     Router,
 };
@@ -67,26 +67,43 @@ pub async fn ornament(Path((state, n)): Path<(String, String)>) -> impl IntoResp
     (StatusCode::OK, result)
 }
 
-pub async fn lockfile(mut multipart: Multipart) -> impl IntoResponse {
-    if let Ok(multipart) = multipart.next_field().await {
-        if let Some(field) = multipart {
-            let name = field.name().unwrap().to_string();
-            let data = field.bytes().await.unwrap();
+pub async fn lockfile(mut multipart: Multipart) -> Response {
+    if let Ok(Some(field)) = multipart.next_field().await {
+        let name = field.name().unwrap().to_string();
+        let data = field.bytes().await.unwrap();
 
-            println!("Length of `{}` is {} bytes", name, data.len());
-            let data = String::from_utf8(data.into()).unwrap();
-            println!("Data: {data}");
-            match data.parse::<Table>() {
-                Ok(data) => {
-                    if let Some(packages) = data.get("package") {
-                        println!("Packges: {:#?}", packages);
-                        let data = packages
+        println!("Length of `{}` is {} bytes", name, data.len());
+        let data = String::from_utf8(data.into()).unwrap();
+        println!("Data: {data}");
+        match data.parse::<Table>() {
+            Ok(data) => {
+                if let Some(packages) = data.get("package") {
+                    println!("Packges: {:#?}", packages);
+                    let checksums: Vec<_> = packages
                         .as_array()
                         .unwrap()
                         .iter()
                         .filter_map(|p| p.as_table())
                         .inspect(|a| println!("{:?}", a))
                         .filter_map(|p| p.get("checksum"))
+                        .collect();
+                    for checksum in checksums.clone() {
+                        if !checksum.is_str() {
+                            return StatusCode::BAD_REQUEST.into_response();
+                        }
+                        if checksum.as_str().unwrap().len() < 10 {
+                            return StatusCode::UNPROCESSABLE_ENTITY.into_response();
+                        }
+                        if !checksum
+                            .as_str()
+                            .unwrap()
+                            .chars()
+                            .all(|c| c.is_ascii_hexdigit())
+                        {
+                            return StatusCode::UNPROCESSABLE_ENTITY.into_response();
+                        }
+                    }
+                    let data = checksums.iter()
                         .filter(|c| c.is_str())
                         .inspect(|a| println!("{:?}", a))
                         .filter_map(|c| c.as_str())
@@ -101,18 +118,15 @@ pub async fn lockfile(mut multipart: Multipart) -> impl IntoResponse {
                         .inspect(|a| println!("{:?}", a))
                         .collect::<Vec<String>>()
                         .join("");
-                        (StatusCode::OK, data)
-                    } else {
-                        println!("No package data");
-                        (StatusCode::BAD_REQUEST, "".to_owned())
-                    }
+                    (StatusCode::OK, data).into_response()
+                } else {
+                    println!("No package data");
+                    (StatusCode::BAD_REQUEST, "".to_owned()).into_response()
                 }
-                _ => (StatusCode::BAD_REQUEST, "".to_owned()),
             }
-        } else {
-            (StatusCode::BAD_REQUEST, "ok".to_owned())
+            _ => (StatusCode::BAD_REQUEST, "".to_owned()).into_response(),
         }
     } else {
-        (StatusCode::BAD_REQUEST, "ok".to_owned())
+        (StatusCode::BAD_REQUEST, "ok".to_owned()).into_response()
     }
 }
